@@ -1,0 +1,33 @@
+services:
+  # Your Node.js Application
+  users-app:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      - DOCKER_ENV=true
+      - MONGO_URI=mongodb://host.docker.internal:27017/customer-master
+      - REDIS_URL=redis://redis-server:6379
+    depends_on:
+      - redis-server
+      - mongo-db
+
+  # Your Redis Server
+  redis-server:
+    image: redis/redis-stack-server:latest
+    ports:
+      - "6379:6379"
+
+  # Your MongoDB Database
+  mongo-db:
+    image: mongo:latest
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+
+# Named volume to keep your database data safe when containers stop
+volumes:
+  mongo-data:
