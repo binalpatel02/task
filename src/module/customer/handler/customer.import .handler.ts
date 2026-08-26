@@ -1,6 +1,5 @@
 import XLSX from "xlsx";
 import Customer from "../model/schema/customer.schema.js";
-import { clearCustomerCache } from "../util/customer.cache.js";
 
 export const importCustomersFromExcel = async (filePath: string) => {
     // Read Excel file
@@ -64,8 +63,6 @@ export const importCustomersFromExcel = async (filePath: string) => {
 
     try {
         const result = await Customer.insertMany(customers, { ordered: false });
-
-        await clearCustomerCache();
 
         return {
             totalRows: rows.length,
