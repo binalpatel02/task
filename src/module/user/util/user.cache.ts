@@ -1,18 +1,16 @@
 import redisClient from "../../../library/redis.js";
 
-export const clearUserCache = async () => {
-    const keys: string[] = [];
+// Helper to generate consistent cache keys matching the service layer
+const getUserCacheKey = (id: string) => `${id}`;
 
-    for await (const batch of redisClient.scanIterator({
-        MATCH: "user:list:*", 
-        COUNT: 100
-    })) {
-        keys.push(...(batch as unknown as string[]));
+export const clearUserCache = async (id: string) => {
+    if (!id) return;
+    
+    const cacheKey = getUserCacheKey(id);
+    try {
+        await redisClient.del(cacheKey);
+        console.log(`[VERIFIED CLEANUP] Wiped profile cache key from memory: ${cacheKey}`);
+    } catch (err) {
+        console.error(`Redis explicitly clear error for key ${cacheKey}:`, err);
     }
-
-    if (keys.length > 0) {
-        await redisClient.del(keys); 
-    }
-
-    console.log(`[VERIFIED CLEANUP] User Redis LIST caches wiped: ${keys.length} keys`);
 };
