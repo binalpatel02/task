@@ -1,23 +1,42 @@
-# Use official Node.js runtime
-FROM node:24-alpine
+# ==========================================
+# STAGE 1: Build & Compile Stage
+# ==========================================
+FROM node:24-alpine AS builder
 
-# Set working directory
 WORKDIR /app
 
-# Copy package files first
-COPY package.json package-lock.json ./
+# Copy ONLY configuration packages to guarantee a clean slate
+COPY package.json package-lock.json tsconfig.json ./
 
-# Install dependencies
+# Install pristine, native Linux-compiled dependencies
 RUN npm ci
 
-# Copy application source
-COPY . .
+# Copy only your source code directory (Bypasses root-level windows node_modules)
+COPY ./src ./src
 
-# Build TypeScript
-RUN npm run build
+# Compile TypeScript cleanly into standard production JavaScript
+RUN npx tsc
 
-# Application port
+# Remove development environments to save space
+RUN npm prune --production
+
+
+# ==========================================
+# STAGE 2: Production Execution Stage
+# ==========================================
+FROM node:24-alpine AS runner
+
+WORKDIR /app
+
+# Copy production package metrics
+COPY package.json package-lock.json ./
+
+# Copy production dependencies and compiled JavaScript from Stage 1
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/dist ./dist
+
+# Expose server listener port
 EXPOSE 3000
 
-# Start compiled application
-CMD ["npm", "start"]
+# Fire up the application natively using Node
+CMD ["node", "dist/index.js"]
