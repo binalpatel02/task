@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import redisClient from "../../../library/redis.js";
 
-// TTL Constant (5 minutes cache expiry)
+// TTL Constant (5 minutes profile cache expiry)
 const CACHE_TTL = 300; 
 
 const getUserCacheKey = (id: string) => `${id}`;
@@ -30,30 +30,18 @@ export const loginUser = async (email_address: string, password: string) => {
     return { user: userWithoutPassword, token };
 };
 
-// CREATE USER - Caches the user profile instantly on creation
+// CREATE USER 
 export const createUser = async (data: any) => {
     const hashedPassword = await bcrypt.hash(data.password || "", 10);
     const userData = { ...data, password: hashedPassword };
 
     const user = await User.create(userData);
     console.log("Successfully inserted into MongoDB:", user._id);
-
-    try {
-        const cacheKey = getUserCacheKey(user._id.toString());
-        await redisClient.set(
-            cacheKey, 
-            JSON.stringify(user.toObject()), 
-            { EX: CACHE_TTL }
-        );
-        console.log(`[REDIS SUCCESS] Cached profile: ${cacheKey}`);
-    } catch (err) {
-        console.error("Redis write error in createUser:", err);
-    }
-
+    
     return user;
 };
 
-// GET USERS
+// GET USERS (LIST)
 export const getUsers = async ( name: string, email: string, mobileNumber: string, page: number, limit: number ) => {
     const skip = (page - 1) * limit;
     const filter: any = {};
@@ -90,16 +78,11 @@ export const getUserById = async (id: string) => {
     }
     
     console.log(`[REDIS MISS] Querying MongoDB for profile: ${id}`);
-    
     const user = await User.findById(id).lean();
     if (!user) return null;
     
     try {
-        await redisClient.set(
-            cacheKey, 
-            JSON.stringify(user), 
-            { EX: CACHE_TTL }
-        );
+        await redisClient.set(cacheKey, JSON.stringify(user), { EX: CACHE_TTL });
         console.log(`[REDIS SUCCESS] Cached missed profile: ${cacheKey}`);
     } catch (err) {
         console.error("Redis write error in getUserById:", err);
@@ -118,12 +101,8 @@ export const updateUser = async (id: string, data: any) => {
     if (user) {
         const cacheKey = getUserCacheKey(id);
         try {
-            await redisClient.set(
-                cacheKey, 
-                JSON.stringify(user.toObject()), 
-                { EX: CACHE_TTL }
-            );
-            console.log(`[REDIS UPDATE] Overwrote cache with fresh profile data: ${id}`);
+            await redisClient.del(cacheKey);
+            console.log(`[REDIS CLEAR] Cleared old cache data during update for user: ${id}`);
         } catch (err) {
             console.error("Redis error in updateUser:", err);
         }
@@ -139,7 +118,7 @@ export const deleteUser = async (id: string) => {
         const cacheKey = getUserCacheKey(id);
         try {
             await redisClient.del(cacheKey);
-            console.log(`[REDIS DELETE] Wiped profile cache key from memory: ${id}`);
+            console.log(`[REDIS CLEAR] Wiped profile cache key during deletion: ${id}`);
         } catch (err) {
             console.error("Redis delete error in deleteUser:", err);
         }
