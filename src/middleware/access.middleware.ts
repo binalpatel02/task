@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { Role } from "../module/role/index.js";
+import redisClient from "../library/redis.js"; 
 
 export const requirePermission = (resource: string, action: "view" | "manage") => {
     return async (req: Request, res: Response, next: NextFunction) => {
@@ -17,18 +18,47 @@ export const requirePermission = (resource: string, action: "view" | "manage") =
 
         try {
             const userTypeVal = activeUser.user_type.toString().trim();
-            let roleData = null;
+            const cacheKey = `role:permissions:${userTypeVal}`;
+            
+            let permissionsStructure: any = null;
 
-            roleData = await Role.findOne({ title: userTypeVal }); 
-
-            if (!roleData) {
-                return res.status(403).json({
-                    success: false,
-                    message: `Assigned role "${userTypeVal}" could not be found`
-                });
+            // fetch permissions from Redis Cache
+            try {
+                const cachedPermissions = await redisClient.get(cacheKey);
+                if (cachedPermissions) {
+                    console.log(`[PERMISSIONS CACHE HIT]: Found permissions for role: ${userTypeVal}`);
+                    permissionsStructure = JSON.parse(cachedPermissions);
+                }
+            } catch (redisReadError) {
+                console.error("[REDIS PERMISSION READ ERROR]:", redisReadError);
             }
 
-            const resourcePermissions = (roleData as any)?.permission?.[resource] || {};
+            // Cache Miss: Fetch from MongoDB
+            if (!permissionsStructure) {
+                console.log(`[PERMISSIONS CACHE MISS]: Fetching from MongoDB for role: ${userTypeVal}`);
+                const roleData = await Role.findOne({ title: userTypeVal }); 
+
+                if (!roleData) {
+                    return res.status(403).json({
+                        success: false,
+                        message: `Assigned role "${userTypeVal}" could not be found`
+                    });
+                }
+
+                // Extract permissions map from database object
+                permissionsStructure = (roleData as any)?.permission || {};
+
+                // Save to Redis with a 1-hour expiration time (3600 seconds)
+                try {
+                    await redisClient.set(cacheKey, JSON.stringify(permissionsStructure), {
+                        EX: 3600
+                    });
+                } catch (redisWriteError) {
+                    console.error("[REDIS PERMISSION WRITE ERROR]:", redisWriteError);
+                }
+            }
+
+            const resourcePermissions = permissionsStructure[resource] || {};
             const hasAccess = !!resourcePermissions[action];
 
             if (!hasAccess) {
