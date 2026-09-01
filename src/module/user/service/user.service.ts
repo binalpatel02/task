@@ -1,4 +1,5 @@
 import * as userHandler from "../handler/user.handler.js";
+import { publishEvent } from "../../../library/rabbitmq.js";
 
 // Login
 export const loginUserService = async ( email_address: string, password: string ) => {
@@ -35,7 +36,25 @@ export const getUserByIdService = async (id: string) => {
 
 // UPDATE
 export const updateUserService = async ( id: string, data: any ) => {
-    return await userHandler.updateUser(id, data);
+
+    const updatedUser = await userHandler.updateUser( id, data );
+
+    if (updatedUser) {
+        console.log( "User updated successfully in DB." );
+
+        await publishEvent("user.updated", {
+            userId: updatedUser._id.toString(),
+
+            first_name: updatedUser.first_name,
+            last_name: updatedUser.last_name,
+            email_address: updatedUser.email_address,
+            mobile_number: updatedUser.mobile_number
+        });
+
+        console.log( `Event 'user.updated' successfully sent for User ID: ${updatedUser._id}`);
+    }
+
+    return updatedUser;
 };
 
 // DELETE
