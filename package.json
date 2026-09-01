@@ -11,10 +11,12 @@
   },
   "keywords": [],
   "dependencies": {
+    "amqplib": "^2.0.1",
     "bcryptjs": "^3.0.3",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "joi": "^18.2.5",
+    "joi-objectid": "^4.0.2",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.9.3",
     "multer": "^2.2.0",
