@@ -1,9 +1,35 @@
 import * as customerHandler from "../handler/customer.handler.js";
 import { importCustomersFromExcel } from "../handler/customer.import .handler.js";
+import { publishEvent } from "../../../library/rabbitmq.js";
+import Customer from "../model/schema/customer.schema.js";
+import User from "../../user/model/schema/user.schema.js";
 
 // CREATE
 export const createCustomerService = async (data: any) => {
-    return await customerHandler.createCustomer(data);
+
+    const user = await User.findOne({
+        email_address: data.emailAddress
+    });
+
+    if (!user) {
+        throw new Error( `User not found for email: ${data.emailAddress}. Please create the User first.` );
+    }
+
+    const newCustomer = await customerHandler.createCustomer(data);
+
+    const linkedCustomer = await Customer.findByIdAndUpdate(
+        newCustomer._id,
+            {
+                userId: user._id
+            },
+            {
+                new: true
+            }
+        ).lean();
+
+    console.log( `Customer (${newCustomer._id}) linked to existing User (${user._id})`);
+
+    return linkedCustomer;
 };
 
 // GET + SEARCH + PAGINATION
@@ -33,10 +59,37 @@ export const getCustomerByIdService = async (id: string) => {
 
 // UPDATE
 export const updateCustomerService = async (id: string, data: any) => {
-    return await customerHandler.updateCustomer(id, data);
+
+    const updatedCustomer = await customerHandler.updateCustomer( id, data );
+
+    if (updatedCustomer &&updatedCustomer.userId ) {
+        console.log( `Customer updated. Publishing customer.updated for User ID: ${updatedCustomer.userId}`);
+
+        await publishEvent( "customer.updated",
+            {
+                userId:
+                    updatedCustomer.userId.toString(),
+
+                first_name:
+                    updatedCustomer.firstName,
+
+                last_name:
+                    updatedCustomer.lastName,
+
+                email_address:
+                    updatedCustomer.emailAddress,
+
+                mobile_number:
+                    updatedCustomer.mobileNumber
+            }
+        );
+
+        console.log( ` Event 'customer.updated' sent for User ID: ${updatedCustomer.userId}`);
+    }
+
+    return updatedCustomer;
 };
 
-// DELETE
 export const deleteCustomerService = async (id: string) => {
     return await customerHandler.deleteCustomer(id);
 };
