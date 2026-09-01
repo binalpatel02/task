@@ -1,6 +1,7 @@
 import "dotenv/config";
 import "./library/passport.js"; 
 import { connectionRedis } from "./library/redis.js";
+import { startCustomerSyncConsumer } from "./module/customer/rabbitmq/consumer.js";
 
 import mongoose from "mongoose";
 import app from "./app.js";
@@ -20,10 +21,15 @@ const startServer = async () => {
     await connectionRedis();
     console.log("Redis connected");
 
+    await startCustomerSyncConsumer();
+    console.log("RabbitMQ Consumers initialized");
+
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
     });
-  } catch (error) {
+  }
+  
+  catch (error) {
     console.error("Server startup failed:", error);
     process.exit(1);
   }
