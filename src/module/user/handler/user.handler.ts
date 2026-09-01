@@ -6,7 +6,7 @@ import redisClient from "../../../library/redis.js";
 // TTL Constant (5 minutes profile cache expiry)
 const CACHE_TTL = 300; 
 
-const getUserCacheKey = (id: string) => `${id}`;
+const getUserCacheKey = (id: string) => `${id}`; 
 
 // LOGIN
 export const loginUser = async (email_address: string, password: string) => {
@@ -20,7 +20,7 @@ export const loginUser = async (email_address: string, password: string) => {
         {
             id: user._id.toString(),
             roleId: (user as any).role?.toString(),     
-            customerId: (user as any).customer?.toString() 
+            customerId: (user as any).customerId?.toString() 
         },
         process.env.JWT_SECRET as string,
         { expiresIn: "1d" }
@@ -35,10 +35,15 @@ export const createUser = async (data: any) => {
     const hashedPassword = await bcrypt.hash(data.password || "", 10);
     const userData = { ...data, password: hashedPassword };
 
-    const user = await User.create(userData);
-    console.log("Successfully inserted into MongoDB:", user._id);
-    
-    return user;
+    try {
+       const user = await User.create(userData);
+       console.log("Successfully inserted into MongoDB:", user._id);
+       return user;
+    }
+    catch (error) {
+       console.error("MongoDB Insertion Failed Error Detail:", error);
+       throw error;
+    }
 };
 
 // GET USERS (LIST)
@@ -93,11 +98,29 @@ export const getUserById = async (id: string) => {
 
 // UPDATE USER 
 export const updateUser = async (id: string, data: any) => {
-    const user = await User.findByIdAndUpdate(id, data, {
+    const mappedUpdate: any = {};
+
+    // Map keys strictly to snake_case parameters to match your User Mongoose Schema properties!
+    if (data.first_name !== undefined) mappedUpdate.first_name = data.first_name;
+    if (data.last_name !== undefined) mappedUpdate.last_name = data.last_name;
+    if (data.email_address !== undefined) mappedUpdate.email_address = data.email_address;
+    if (data.mobile_number !== undefined) mappedUpdate.mobile_number = data.mobile_number;
+
+    // Fallbacks if data arrives formatted in camelCase directly
+    if (data.firstName !== undefined) mappedUpdate.first_name = data.firstName;
+    if (data.lastName !== undefined) mappedUpdate.last_name = data.lastName;
+    if (data.emailAddress !== undefined) mappedUpdate.email_address = data.emailAddress;
+    if (data.mobileNumber !== undefined) mappedUpdate.mobile_number = data.mobileNumber;
+    
+    if (data.customerId !== undefined) mappedUpdate.customerId = data.customerId;
+
+    console.log("Clean Mongoose Update payload mapping target:", mappedUpdate);
+
+    const user = await User.findByIdAndUpdate(id, mappedUpdate, {
         returnDocument: "after",
         runValidators: true
     });
-
+    
     if (user) {
         const cacheKey = getUserCacheKey(id);
         try {
@@ -107,6 +130,7 @@ export const updateUser = async (id: string, data: any) => {
             console.error("Redis error in updateUser:", err);
         }
     }
+    
     return user;
 };
 
