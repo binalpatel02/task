@@ -1,3 +1,4 @@
 node_modules/
 dist/
-.env
+.env.user1
+.env.user2
