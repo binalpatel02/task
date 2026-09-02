@@ -1,38 +1,105 @@
 services:
-  users-app:
+
+  user1:
     build: .
+    container_name: user1
+
     ports:
       - "3000:3000"
+
     env_file:
-      - .env
+      - .env.user1
+
     environment:
-      - DOCKER_ENV=true
-      - MONGO_URI=mongodb://host.docker.internal:27017/customer-master
-      - REDIS_URL=redis://redis-server:6379
-      - RABBITMQ_URL=amqp://rabbitmq-server:5672
+      DOCKER_ENV: "true"
+
     depends_on:
-      - redis-server
-      - mongo-db
-      - rabbitmq-server
+      mongo-db:
+        condition: service_healthy
+      redis-server:
+        condition: service_healthy
+      rabbitmq-server:
+        condition: service_healthy
+
+
+  user2:
+    build: .
+    container_name: user2
+
+    ports:
+      - "4000:4000"
+
+    env_file:
+      - .env.user2
+
+    environment:
+      DOCKER_ENV: "true"
+
+    depends_on:
+      mongo-db:
+        condition: service_healthy
+      redis-server:
+        condition: service_healthy
+      rabbitmq-server:
+        condition: service_healthy
+
 
   redis-server:
     image: redis/redis-stack-server:latest
+    container_name: redis-server
+
     ports:
       - "6379:6379"
 
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+
   mongo-db:
     image: mongo:latest
+    container_name: mongo-db
+
     ports:
       - "27017:27017"
+
     volumes:
       - mongo-data:/data/db
 
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mongosh --quiet --eval 'db.adminCommand(\"ping\").ok'"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+
   rabbitmq-server:
     image: rabbitmq:4-management
+    container_name: rabbitmq-server
+
     ports:
-      - "15672:15672" 
+      - "5672:5672"
+      - "15672:15672"
+
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin123
+
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
+
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
 
 volumes:
   mongo-data:
